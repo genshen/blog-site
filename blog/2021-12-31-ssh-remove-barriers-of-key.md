@@ -154,22 +154,27 @@ tcp        0      0 127.0.0.1:2222          0.0.0.0:*               LISTEN      
    ```
 
 ### 普通用户的配置
+对于需要使用远程计算服务资源的人，采用如下配置：
 
-对于需要使用远程计算服务资源的人，在**自己电脑**上：
-1. 从远程的计算服务的登录节点上，下载私钥文件，假设私钥存在自己电脑上的 `~/.ssh/id_rsa_remote` 位置。
+1. 配置 ssh 无密码认证：生成一对公钥和密钥，私钥存在自己电脑上（如位置：`~/.ssh/id_rsa_remote`），在远程的计算服务的登录节点上配置公钥（公钥保存到`authorized_keys`中）。
 
-2. 配置下自己的 ssh config:
+2. 在**自己电脑**上，直接用上面开放的端口、地址及用户名，执行ssh连接：
+    ```bash
+    ssh -p 2222 remote-user@node01 -i ~/.ssh/id_rsa_remote  # 这里写成自己电脑访问 node01 的 ip 或者域名，私钥采用前一步生成的。
+    ```
+   或者采用**另一种方案**，是将配置写进 ssh 的 config 文件中，
+
     ```bash
     Host remote-forward
-        Hostname node01 # 这里写从自己电脑访问 node01 的 ip 或者域名
+        Hostname node01 # 这里写成自己电脑访问node01 的 ip 或者域名
         Port 2222
-        IdentityFile ~/.ssh/id_rsa_remote
         User remote-user
+        IdentityFile ~/.ssh/id_rsa_remote
     ```
-3. 执行连接
-    ```bash
-    ssh remote-forward
-    ```
+
+    然后执行 `ssh remote-forward` 即可。
+
+---
 
 至此，终于干掉了口令卡（别长时间不用口令卡，到时候找不着口令卡放哪了😂）。  
 当然，现在的方案也还有一些小小的问题，例如每次都用的是远程计算服务的 login09 节点，没有充分利用负载均衡。
