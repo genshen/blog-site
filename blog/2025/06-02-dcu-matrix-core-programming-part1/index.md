@@ -166,7 +166,7 @@ s_mov_b32 s28, s14
 其中，`main.cpp` 是入口，libaray 目录中的源代码将会被编译为一个库 libfoo.a，然后被 main.cpp 链接生成二进制代码。
 此外，libaray 目录中的 `libfoo.cpp` 中包含核函数，且核函数为 Hello World 例子中的带有 Matrix Core 支持的核函数。
 
-### CMakeLists.txt 文件的配置
+### CMakeLists.txt 文件的配置说明
 首先，是根目录的下的 CMakeLists.txt：
 ```cmake
 cmake_minimum_required(VERSION 3.21)
@@ -181,7 +181,7 @@ add_subdirectory(library)
 add_executable(matrix-core-demo main.cpp)
 target_link_libraries(matrix-core-demo PUBLIC ${MY_LIB_NAME})
 ```
-由于 DTK 25.04 已经支持在 CMake 中将 HIP 作为一种语言使用了。
+由于 DTK 25.04 + CMake的某些版本（3.19，3.21 等），已经支持在 CMake 中将 HIP 作为一种语言使用了（注意：如果不支持，则需要参考[这个hip_add_executable/hip_add_library方案](https://github.com/ROCm/hip/tree/rocm-3.10.x/samples/2_Cookbook/12_cmake_hip_add_executable)）。
 这里，`project()` 中直接指定了项目的语言为 HIP、CXX 两种。
 
 其中，HIP 语言默认的源代码后缀是`.hip`，也可以通过 `set_source_files_properties` 指定其他文件名为 HIP 语言。最后，将 main.cpp 编译成可执行文件，并链接 library 下生成的库。
@@ -202,24 +202,58 @@ target_include_directories(
 ```
 这里，利用 `set_source_files_properties` 将 `libfoo.cpp` 指定为 HIP 语言代码。
 
+### 编译运行
 编译 CMake 工程：
 ```bash
 cmake -B ./build -S ./ -DCMAKE_HIP_COMPILER=dcc -DCMAKE_CXX_COMPILER=hipcc
 cmake --build ./build --verbose
 ```
-这里，指定 dcc 是 HIP代码的编译器，hipcc 是 C++代码的编译器（C++代码中可能会有一些 HIP API的调用（如 hipMalloc），故采用 dcc 或者hipcc 进行编译）。
+这里，指定 dcc 是 HIP代码的编译器，hipcc 是 C++代码的编译器（C++代码中可能会有一些 HIP API的调用（如 hipMalloc），故采用 dcc 或者hipcc 进行编译）。  
 
-### 指定特定的架构
-由于`libfoo.cpp` 中包含了针对 gfx928 架构的核函数代码，因此需要指定只针对该架构进行编译。这个可以通过 [HIP_ARCHITECTURES](https://cmake.org/cmake/help/latest/prop_tgt/HIP_ARCHITECTURES.html#prop_tgt:HIP_ARCHITECTURES) 实现：
+编译完成后，可执行程序位于 build 目录下，可以用以下命令运行：
+```bash
+# 实训平台：可以直接运行：
+./build/matrix-core-demo
+
+# 超算互联网平台：需要用 srun 运行（队列名称需依据账号资源确定）：
+srun -n 1 -p wzidnormal --gres=dcu:1 ./build/matrix-core-demo
+```
+
+### 在 CMake 中指定特定的架构
+由于`libfoo.cpp` 中包含了针对 gfx928 架构的核函数代码，因此需要指定只针对该架构进行编译。
+这个是通过 [HIP_ARCHITECTURES](https://cmake.org/cmake/help/latest/prop_tgt/HIP_ARCHITECTURES.html#prop_tgt:HIP_ARCHITECTURES) 实现的：
 ```cmake
+# 我们在 library/CMakeLists.txt 文件中加了这一行。
 set_property(TARGET ${MY_LIB_NAME} PROPERTY HIP_ARCHITECTURES gfx928)
 ```
-可以在构建阶段，用`cmake --build ./build --verbose` 命令输出编译命令，
-对比下添加这句前后输出的编译命令的差异(删除线是之前的，默认包含了所有的架构)：
-```diff
-- clang++  -I"/work/home/genshen/tc2/library" --offload-arch=gfx906 --offload-arch=gfx926 --offload-arch=gfx928 --offload-arch=gfx936 -std=gnu++11 -o CMakeFiles/foo.dir/libfoo.cpp.o -x hip -c /work/home/genshen/tc2/library/libfoo.cpp
-+ clang++  -I/work/home/genshen/tc2/library --offload-arch=gfx928 -std=gnu++11 -o CMakeFiles/foo.dir/libfoo.cpp.o -x hip -c /work/home/genshen/tc2/library/libfoo.cpp
+
+我们可以在构建阶段，用`cmake --build ./build --verbose` 命令输出编译命令（参见上面的“编译运行”部分），
+来对比下添加这句前后输出的编译命令的差异。
+```bash
+vi library/CMakeLists.txt # 编辑，删除 `set_property(TARGET ${MY_LIB_NAME} PROPERTY HIP_ARCHITECTURES gfx928)` 这一行
+
+# 重新 CMake 编译
+rm build -rf
+cmake -B ./build -S ./ -DCMAKE_HIP_COMPILER=dcc -DCMAKE_CXX_COMPILER=hipcc
+cmake --build ./build --verbose
 ```
+
+下面是对`library/CMakeLists.txt`文件中的`set_property`语句删除前后的对比的一个参考。
+其中，第一行是删除之后的，默认包含了所有的架构；第二行是删除前的，只包含了 gfx928 架构：
+```diff
+- /opt/dtk/llvm/bin/dcc  -D__HIP_ROCclr__=1 -I/work/home/genshen/tc2/library -std=gnu++11 --offload-arch=gfx906 --offload-arch=gfx926 --offload-arch=gfx928 --offload-arch=gfx936 [... other args is omitted] -o CMakeFiles/foo.dir/libfoo.cpp.o -x hip -c /work/home/genshen/tc2/library/libfoo.cpp
++ /opt/dtk/llvm/bin/dcc  -D__HIP_ROCclr__=1 -I/work/home/genshen/tc2/library -std=gnu++11 --offload-arch=gfx928 [... other args is omitted] -o CMakeFiles/foo.dir/libfoo.cpp.o -x hip -c /work/home/genshen/tc2/library/libfoo.cpp
+```
+
+注意，删除`set_property` 这条 CMake 语句后，编译可能会出错。
+这是因为 `library/libfoo.cpp` 中使用了 `__builtin_amdgcn_mmac_f32_16x16x8f32`, 且 gfx906、gfx926 等架构不支持该 Matrix Core 指令。
+
+如果把对应的 CMake 脚本改为如下内容，则编译可正常通过。
+```cmake
+# in file library/CMakeLists.txt 
+set_property(TARGET ${MY_LIB_NAME} PROPERTY HIP_ARCHITECTURES gfx928 gfx936) # for K100-AI and BW.
+```
+
 
 <!-- todo: target `hip::host` 与 `hip::device` -->
 

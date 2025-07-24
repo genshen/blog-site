@@ -65,9 +65,10 @@ wavefront 内的寄存器 layout 如下：
 对于数据写回到设备内存中的步骤，也可以采用上述类似的形式进行操作。
 
 ## 支持的指令
-大家可以拆从 DTK 头文件中，抓取支持的指令，例如：
+
+大家可以拆从 DTK 头文件中，抓取支持的指令。例如 DTK 安装的路径在`/opt/dtk/` 下，那么可以用下面的命令获取不同架构支持的指令：
 ```bash
-grep -nr __builtin_amdgcn_mmac_  /public/home/sghpc_sdk/Linux_x86_64/25.6/dtk/25.04.1/
+grep -nr __builtin_amdgcn_mmac_  /opt/dtk/
 ```
 
 ## 参考资料（AMD）
